@@ -15,7 +15,7 @@ function init() {
     x: 0,
     y: 25,
     z: 10,
-    axes: true,
+    axes: false,
   };
 
   // シーン作成
@@ -26,12 +26,16 @@ function init() {
   scene.add(axes);
 
   // ブロック数のカウント
-  let nBlock = 0
+  let nBrick = 0
 
   // スコア表示
   let score = 0;
   let life = 3;
   function setScore(score) {
+    document.getElementById("score").innerText
+    = String(Math.round(score)).padStart(8, "0");
+    document.getElementById("life").innerText =
+     "○○○".substring(0,life);
   }
 
   // Geometry の分割数
@@ -45,6 +49,7 @@ function init() {
     new THREE.SphereGeometry(ballR, nSeg, nSeg),
     new THREE.MeshPhongMaterial({ color: 0x808080, shininess: 100, specular: 0xa0a0a0 })
   );
+  ball.geometry.computeBoundingSphere();
   scene.add(ball);
 
   // ボールの移動
@@ -70,6 +75,7 @@ function init() {
   // ボールを停止する
   function stopBall() {
     speed = 0
+    life --;
     ballLive = false;
   }
 
@@ -77,6 +83,13 @@ function init() {
   function startBall() {
     ballLive = true;
     speed = 10;
+    vx = Math.cos(pi / 4);
+    vz = Math.sin(pi / 4);
+    score = 0;
+    if (life <= 0) {
+      resetBrick();
+      life = 3;
+    }
   }
 
   // マウスクリックでスタートする
@@ -208,42 +221,93 @@ function init() {
       if (ball.position.x > paddle.position.x + paddleL/2) {
         vx = Math.abs(vx);
       }
+      // 左側部分と衝突
       else if (ball.position.x < paddle.position.x - paddleL/2) {
         vx = -Math.abs(vx);
+      }
+      if (nBrick <= 0) {
+        resetBrick();
       }
     }
   }
 
   // ブロック ーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー
   // ブロックの生成
+  const color = ["white", "red", "yellow", "blue", "purple", "green"];
+  const bp = {
+    h: 0.8, /* ブロックの高さ */ d: 0.4, /* ブロックの奥行 */
+    nRow: 6, /* ブロックの行数 */ nCol: 9, /* ブロックの列数 */
+//      nRow: 2, /* ブロックの行数 */ nCol: 1, /* ブロックの列数 */
+    gapX: 0.1, /* 横方向の隙間 */ gapZ: 0.3 /* 縦方向の隙間 */
+  };
   const bricks = new THREE.Group();
   {
-    const color = ["white", "red", "yellow", "blue", "purple", "green"];
-    const param = {
-      h: 0.8, /* ブロックの高さ */ d: 0.4, /* ブロックの奥行 */
-      nRow: 6, /* ブロックの行数 */ nCol: 9, /* ブロックの列数 */
-      gapX: 0.1, /* 横方向の隙間 */ gapZ: 0.3 /* 縦方向の隙間 */
-    };
     // ブロックの幅
-    param.w = (hFrameW - 2 * vFrameW - (param.nCol + 1) * param.gapX) / param.nCol;
+    bp.w = (hFrameW - 2 * vFrameW - (bp.nCol + 1) * bp.gapX) / bp.nCol;
     // ブロックを並べる
+    for (let r = 0; r < bp.nRow; r++) {
+      for (let c = 0; c < bp.nCol; c++) {
+        const brick = new THREE.Mesh(
+          new THREE.BoxGeometry(bp.w, bp.h, bp.d),
+          new THREE.MeshLambertMaterial({color: color[r % color.length]})
+        );
+        brick.position.set(
+          (bp.w + bp.gapX) * (c-(bp.nCol-1)/2),
+          0,
+          -(bp.d + bp.gapZ) * r
 
+        )
+        brick.geometry.computeBoundingBox();
+        bricks.add(brick);
+        nBrick++;
+      }
+    }
     // ブロック全体を奥に移動する
-
+    bricks.position.z = -4;
+    scene.add(bricks);
   }
 
   // ブロックの衝突検出
   function brickCheck() {
     let hit = false;
-
+    const sphere = ball.geometry.boundingSphere.clone();
+    sphere.translate(ball.position);
     bricks.children.forEach((brick) => {
+      if (!hit && brick.visible) {
+        let box = brick.geometry.boundingBox.clone();
+        box.translate(bricks.position);
+        box.translate(brick.position);
+        if (box.intersectsSphere(sphere)) {
+          hit = true;
+          brick.visible = false;
+          nBrick--;
+          score += (1 - brick.position.z/(bp.d + bp.gapZ)) * 100;
+          const brickWidth = brick.geometry.parameters.width;
+          const brickDepth = brick.geometry.parameters.depth;
+          if (brick.position.z + bricks.position.z + brickDepth/2 < ball.position.z) {
+            vz = Math.abs(vz);
+          }
+          if (brick.position.z + bricks.position.z - brickDepth/2 > ball.position.z) {
+            vz = -Math.abs(vz);
+          }
+          if (brick.position.x - brickWidth / 2 > ball.position.x) {
+            vx = -Math.abs(vx);
+          }
+          if (brick.position.x + brickWidth / 2 < ball.position.x) {
+            vx = Math.abs(vx);
+          }
+        }
+      }
     });
   }
 
-
   // ブロックの再表示
   function resetBrick() {
-
+    nBrick = 0;
+    bricks.children.forEach((brick) => {
+      brick.visible = true;
+      nBrick++;
+    })
   }
 
   // 光源の設定
